@@ -60,6 +60,13 @@ if opt.gpuid >= 0 then
   if opt.backend == 'cudnn' then require 'cudnn' end
   cutorch.manualSeed(opt.seed)
   cutorch.setDevice(opt.gpuid + 1) -- note +1 because lua is 1-indexed
+  -- simulate a fixed memory on the GPU
+  local freemem = cutorch.getMemoryUsage()
+  local neededmem = 0.8 * 1024 * 1024 * 1024
+  if freemem - neededmem > 4 then
+     reserved_tensor = torch.CudaTensor((freemem - neededmem) / 4):fill(0)
+  end
+  print('Free memory: ' .. cutorch.getMemoryUsage())
 end
 
 -------------------------------------------------------------------------------
@@ -72,7 +79,7 @@ if string.len(opt.input_h5) == 0 then opt.input_h5 = checkpoint.opt.input_h5 end
 if string.len(opt.input_json) == 0 then opt.input_json = checkpoint.opt.input_json end
 if opt.batch_size == 0 then opt.batch_size = checkpoint.opt.batch_size end
 local fetch = {'rnn_size', 'input_encoding_size', 'drop_prob_lm', 'cnn_proto', 'cnn_model', 'seq_per_img'}
-for k,v in pairs(fetch) do 
+for k,v in pairs(fetch) do
   opt[v] = checkpoint.opt[v] -- copy over options from model
 end
 local vocab = checkpoint.vocab -- ix -> word mapping
@@ -95,7 +102,7 @@ protos.expander = nn.FeatExpander(opt.seq_per_img)
 protos.crit = nn.LanguageModelCriterion()
 protos.lm:createClones() -- reconstruct clones inside the language model
 if opt.gpuid >= 0 then for k,v in pairs(protos) do v:cuda() end end
-
+-- utils.optimizeInferenceMemory(protos.cnn)
 -------------------------------------------------------------------------------
 -- Evaluation fun(ction)
 -------------------------------------------------------------------------------

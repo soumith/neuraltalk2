@@ -68,4 +68,31 @@ function utils.average_values(t)
   return vsum / n
 end
 
+-- a function to do memory optimizations by
+-- setting up double-buffering across the network.
+-- this drastically reduces the memory needed to generate samples.
+function utils.optimizeInferenceMemory(net)
+   local finput, output = nil, {}
+   local used = 1
+    net:apply(
+       function(m)
+          if torch.type(m):find('Convolution') then
+                finput = finput or m.finput
+                m.finput = finput
+                if used == 1 then
+                   output[1] = output[1] or m.output
+                   m.output = output[1]
+                   used = 2
+                else
+                   output[2] = output[2] or m.output
+                   m.output = output[2]
+                   used = 1
+                end
+          elseif torch.type(m):find('ReLU') then
+                m.inplace = true
+          end
+    end)
+end
+
+
 return utils
